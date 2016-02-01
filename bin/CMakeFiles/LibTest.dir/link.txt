@@ -1,0 +1,1 @@
+/usr/bin/c++    -fopenmp -g    CMakeFiles/LibTest.dir/applications/LibTest.cc.o  -o LibTest -rdynamic lib/src/libRBMedImLib.a 

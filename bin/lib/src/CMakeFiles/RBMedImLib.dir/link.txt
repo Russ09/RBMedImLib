@@ -1,0 +1,2 @@
+/usr/bin/ar cr libRBMedImLib.a  CMakeFiles/RBMedImLib.dir/RBMedImLib.cc.o
+/usr/bin/ranlib libRBMedImLib.a

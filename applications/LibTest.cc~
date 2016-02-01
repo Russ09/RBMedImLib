@@ -1,0 +1,85 @@
+ #include <RBMedImLib.h>
+ 
+ #include <stdio.h>
+ #include <float.h>
+ #include <algorithm>
+ 
+ int main(void){
+ 
+ std::cout << "Hello World!\n";
+ 
+ ScalarField Image1;
+
+ int *A;
+ int *B;
+ 
+ A = new int[10];
+ B = new int[10];
+ 
+ int i;
+ 
+ for(i=0;i<10;i++){
+ 	A[i] = i;
+ 	B[i] = 3*i;
+ }
+ 
+ std::swap(A,B);
+ 
+ std::cout << A[5] << " " << B[5] << std::endl;
+ 
+ 
+ ScalarField Image3;
+ 
+ Image3.NX = 99;
+ 
+ Image3 = Image1;
+ 
+ Point P1,P2,P3,P4,P5;
+ 
+ P1(1) = 1;
+ P1(2) = 1;
+ P1(3) = 1;
+ 
+ P2(1) = 2;
+ P2(2) = 2;
+ P2(3) = 2;
+ 
+ P3(1) = 3;
+ P3(2) = 3;
+ P3(3) = 3;
+ 
+ P4(1) = 4;
+ P4(2) = 4;
+ P4(3) = 4;
+ 
+ P5(1) = 5;
+ P5(2) = 5;
+ P5(3) = 5;
+ 
+ LineSegment L1(P1);
+ 
+ L1.addPoint(P2);
+ L1.addPoint(P3);
+ L1.addPoint(P4);
+ L1.addPoint(P5);
+ 
+ Point POut;
+ 
+ POut = L1.getPoint(3);
+ 
+ std::cout<< POut(1) << POut(2) << POut(3) << std::endl;
+ 
+ L1.removePoint(5);
+ POut = L1.getPoint(3);
+ 
+ std::cout<< POut(1) << POut(2) << POut(3) << std::endl;
+
+ Kernel K1;
+ 
+ K1.GenerateUniform(P5);
+ 
+ std::cout << K1.getValue(1,2,3) << std::endl;
+ 
+  return 0;
+  
+  }

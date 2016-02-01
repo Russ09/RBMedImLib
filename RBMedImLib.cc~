@@ -1,0 +1,92 @@
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//			Author: Russell Bates				     //
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+// 			C++ image analysis library 			     //
+//				RBMedImLib.h				     //
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+#include <RBMedImLib.h>
+
+
+//constructor
+ScalarField::ScalarField(void){
+	this->NX=0;
+	this->NY=0;
+	this->NZ=0;
+	this->NT=0;
+}
+
+//destructor
+ScalarField::~ScalarField(void){
+	delete this->ScalField;
+}
+
+float ScalarField::get(int x,int y, int z=0,int t=0){
+	return this->field[t*this->NXNYNZ + z*->this->NXNY + y*NX + x];
+}
+
+void ScalarField::set(float value,int x,int y, int z=0,int t=0){
+	this->field[t*this->NXNYNZ + z*->this->NXNY + y*NX + x] = value;
+}
+
+void ScalarField::setAll(float value,int t){
+	int x,y,z;
+	for(x=0;x<this->NX;x++) for(y=0;y<this->NY;y++) for(z=0;z<this->NZ;z++) this->set(value,x,y,z,t);
+}
+
+void ScalarField::multiplyFrameByScalar(float scalar,int t=0){
+	int x,y,z;
+	for(x=0;x<this->NX;x++) for(y=0;y<this->NY;y++) for(z=0;z<this->NZ;z++) this->set(value*this->get(x,y,z,t),x,y,z,t);
+}
+
+float ScalarField::getMax(void){
+	int x,y,z,t;
+	float maxVal;
+	float thisVal;
+	
+	maxVal = this->get(0,0,0,0);
+	
+	for(x=0;x<this->NX;x++){
+	for(y=0;y<this->NY;y++){
+	for(z=0;z<this->NZ;z++){
+	for(t=0;t<this->NT;t++){
+		thisVal = this->get(x,y,z,t);
+		if(thisVal > maxVal){
+			maxVal = thisVal;
+		}
+	}}}}
+			
+}
+
+float ScalarField::getMin(void){
+	int x,y,z,t;
+	float minVal;
+	float thisVal;
+	
+	minVal = this->get(0,0,0,0);
+	
+	for(x=0;x<this->NX;x++){
+	for(y=0;y<this->NY;y++){
+	for(z=0;z<this->NZ;z++){
+	for(t=0;t<this->NT;t++){
+		thisVal = this->get(x,y,z,t);
+		if(thisVal < minVal){
+			minVal = thisVal;
+		}
+	}}}}
+			
+}
+
+ScalarField& ScalarField::operator+=(const float& scalar){
+	int x,y,z,t;
+	for(x=0;x<this->NX;x++) for(y=0;y<this->NY;y++) for(z=0;z<this->NZ;z++) for(t=0;t<this->NT;t++) this->set(scalar+this->get(x,y,z,t),x,y,z,t);
+	return *this;
+}
+
+ScalarField& ScalarField::operator+=(const ScalarField& field){
+	int x,y,z,t;
+	for(x=0;x<this->NX;x++) for(y=0;y<this->NY;y++) for(z=0;z<this->NZ;z++) for(t=0;t<this->NT;t++) this->set(field.get(x,y,z,t)+this->get(x,y,z,t),x,y,z,t);
+	return *this;
+}
+
+

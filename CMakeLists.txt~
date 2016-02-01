@@ -1,0 +1,13 @@
+cmake_minimum_required (VERSION 2.6)
+project (RussLibTest)
+
+include_directories("${PROJECT_SOURCE_DIR}/lib/nifti/niftilib")
+include_directories("${PROJECT_SOURCE_DIR}/lib/nifti/znzlib")
+include_directories("${PROJECT_SOURCE_DIR}/lib/include")
+add_subdirectory(lib/src)
+
+set(EXTRA_LIBS ${EXTRA_LIBS} RBMedImLib)
+
+add_executable(LibTest	applications/LibTest.cc)
+
+target_link_libraries (LibTest  ${EXTRA_LIBS})

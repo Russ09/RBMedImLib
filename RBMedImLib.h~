@@ -1,0 +1,89 @@
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//			Author: Russell Bates				     //
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+// 			C++ image analysis library 			     //
+//				RBMedImLib.h				     //
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+
+#include <iostream>
+#include <string>
+
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <float.h>
+
+#include <nifti1.h>
+#include <nifti1_io.h>
+
+#define MIN_HEADER_SIZE 348
+#define NII_HEADER_SIZE 352
+
+
+//------------------Class 1: ScalarField----------------------------------------
+
+
+class ScalarField{
+
+private:
+	//size of the field
+	int NXNY; // size of slice
+	int NXNYNZ; // size of volume
+	
+	// X,Y,Z,T voxel sizes (mm/seconds);
+	int dX;
+	int dY;
+	int dZ;
+	int dT;
+	
+	//scalar field
+	float *field;
+	
+public:
+	
+	// X,Y,Z,T dimensions in voxels	
+	int NX;
+	int NY;
+	int NZ;
+	int NT;
+
+	float im2wld[4][4]; //Image to World coordinates transformation
+	float wld2im[4][4]; //World to Image coordinates transformation
+	
+	ScalarField(); //constructor
+	~ScalarField(); //destructor
+	
+	virtual float get(int x,int y, int z=0,int t=0); //retrieves given voxel value
+	virtual void set(float value,int x,int y, int z=0,int t=0); //sets given voxel to value
+	
+	virtual void ScalarField::setAll(float value,int t); //sets all voxels in a specific frame to value
+	
+	virtual void multiplyFrameByScalar(float scalar,int t=0); //multiplies a specific frame by a scalar
+	
+	virtual float getMax(void); // retrieves the maximum value from the image volume
+	virtual float getMin(void); // retrieves the minimum value from the image volume
+	
+	virtual void readNifti(char* imageName);
+	
+	ScalarField& operator+=(const float scalar);
+	ScalarField& operator+=(const ScalarField field);
+};
+
+
+	
+	ScalarField operator*(float scalar); 		// multiplies the entire image volume by scalar 
+	ScalarField operator*(ScalarField field);	// element-wise multiplication between scalar fields (must have same dimensions)
+	
+	ScalarField operator+(float scalar);		// increments entire image volume by scalar
+	ScalarField operator+(ScalarField field);	// element-wise addition between scalar fields (must have same dimensions)	
+	
+	ScalarField operator-(float scalar);		// subtracts scalar from entire image volume
+	ScalarField operator-(ScalarField field);	// element-wise subtraction between scalar fields (must have same dimensions)
+	
+	ScalarField operator/(float scalar);		// divides image volume by scalar
+	ScalarField operator/(ScalarField field);	// element-wise division between scalar fields (must have same dimensions)
+	
+	
+	
+	

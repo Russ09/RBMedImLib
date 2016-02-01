@@ -1,0 +1,250 @@
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//			Author: Russell Bates				     //
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+// 			C++ image analysis library 			     //
+//				RBMedImLib.h				     //
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+
+#include <iostream>
+#include <string>
+
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <float.h>
+
+#include <nifti1.h>
+#include <nifti1_io.h>
+
+#define MIN_HEADER_SIZE 348
+#define NII_HEADER_SIZE 352
+
+
+//------------------Class 1: ScalarField----------------------------------------
+
+
+class ScalarField{
+
+private:
+	//size of the field
+	int NXNY; // size of slice
+	int NXNYNZ; // size of volume
+	
+	// X,Y,Z,T voxel sizes (mm/seconds);
+	int dX;
+	int dY;
+	int dZ;
+	int dT;
+	
+	//scalar field
+	float *field;
+	
+public:
+	
+	// X,Y,Z,T dimensions in voxels	
+	int NX;
+	int NY;
+	int NZ;
+	int NT;
+
+	float im2wld[4][4]; //Image to World coordinates transformation
+	float wld2im[4][4]; //World to Image coordinates transformation
+	
+	ScalarField(); //constructor
+	ScalarField(const ScalarField& ScalField); //copy constructor
+	
+	~ScalarField(); //destructor
+	
+	inline float get(int x,int y, int z=0,int t=0) const; //retrieves given voxel value
+	inline float get(int i)const;
+	void set(float value,int x,int y, int z=0,int t=0); //sets given voxel to value
+	void set(float value,int i); //set by linear indexing
+	
+	virtual float getDim(int dim)const; // gets the size in the selected dimension
+	
+	virtual void setAll(float value,int t); //sets all voxels in a specific frame to value
+	
+	virtual void multiplyFrameByScalar(float scalar,int t=0); //multiplies a specific frame by a scalar
+	
+	virtual float getMax(void); // retrieves the maximum value from the image volume
+	virtual float getMin(void); // retrieves the minimum value from the image volume
+	
+	virtual void readNifti(char* imageName);
+	virtual void writeNifti(char *imageName);
+	
+	friend void swap(ScalarField& first, ScalarField& second);
+	
+	
+	//---------------Overloaded unary operators---------------------
+	ScalarField& operator=(ScalarField other);
+	
+	ScalarField& operator+=(const float& scalar);
+	ScalarField& operator+=(const ScalarField& ScalField);
+	ScalarField& operator-=(const float& scalar);
+	ScalarField& operator-=(const ScalarField& ScalField);
+	ScalarField& operator*=(const float& scalar);
+	ScalarField& operator*=(const ScalarField& ScalField);
+	ScalarField& operator/=(const float& scalar);
+	ScalarField& operator/=(const ScalarField& ScalField);
+	//---------------------------------------------------------------
+};
+
+
+	//---------------Overloaded binary operators------------------------------------
+	ScalarField operator*(ScalarField ScalField,const float scalar); 		// multiplies the entire image volume by scalar 
+	ScalarField operator*(ScalarField ScalField1,const ScalarField& ScalField2);	// element-wise multiplication between scalar fields (must have same dimensions)
+	
+	ScalarField operator+(ScalarField ScalField,const float scalar);		// increments entire image volume by scalar
+	ScalarField operator+(ScalarField ScalField1,const ScalarField& ScalField2);	// element-wise addition between scalar fields (must have same dimensions)	
+	
+	ScalarField operator-(ScalarField ScalField,const float scalar);		// subtracts scalar from entire image volume
+	ScalarField operator-(ScalarField ScalField1,const ScalarField& ScalField2);	// element-wise subtraction between scalar fields (must have same dimensions)
+	
+	ScalarField operator/(ScalarField ScalField,const float scalar);		// divides image volume by scalar
+	ScalarField operator/(ScalarField ScalField1,const ScalarField& ScalField2);	// element-wise division between scalar fields (must have same dimensions)
+	
+	//--------------------------------------------------------------------------------
+	
+	
+	
+//-----------Class 2: Point---------------------------------------------------------
+
+class Point{
+
+private:
+
+	int nDims;
+	float *coords;
+	
+public:
+
+	Point(); //constructor
+	Point(int nDims);
+	Point(const Point& P1); //copy constructor
+	Point(float x, float y, float z); //initialise 3D point
+	~Point(); //destructor
+	
+	
+	
+	int getDims(void)const{return nDims;}; //return the number of dimensions
+	
+	virtual float get(const int i) const; //retrieve value in ith dimension
+	virtual void set(const int i,const float value); //set value in ith dimension
+	
+	friend void swap(Point& P1, Point& P2); //swaps Point P1 for Point P2
+	friend float dot(Point& P1, Point& P2); //performs dot product between P1 and P2
+	friend float abs(Point P1);
+	friend float prod(Point P1);
+	
+	float& operator()(const int& i); //allows for indexing using round brackets P1(2) etc.
+	
+	//Overloaded unary operators
+	Point& operator+=(const Point& P2); 
+	Point& operator+=(const float& value); 
+	Point& operator-=(const Point& P2);
+	Point& operator-=(const float& value); 
+	Point& operator/=(const Point& P2); 
+	Point& operator/=(const float& value); 
+	Point& operator*=(const Point& P2);
+	Point& operator*=(const float& value); 
+	
+	Point& operator=(Point other);
+};
+	//Overloaded binary operators
+	Point operator+(Point P1, const Point& P2);
+	Point operator+(Point P1, const float& value);
+	Point operator-(Point P1, const Point& P2);
+	Point operator-(Point P1, const float& value);
+	Point operator/(Point P1, const Point& P2);
+	Point operator/(Point P1, const float& value);
+	Point operator*(Point P1, const Point& P2);
+	Point operator*(Point P1, const float& value);
+
+	
+//---------------Class 3: LineSegment----------------------------------------
+
+class LineSegment{
+
+
+private:
+	int nPoints;
+	int nDims;
+	
+	//float tortuosity;
+	float length;
+	float CLR;
+
+	Point *Points;
+	
+public:
+
+	LineSegment();
+	LineSegment(const Point& P1);
+	
+	virtual Point getPoint(int i);
+	virtual Point getLastPoint(void);
+	virtual void addPoint(Point P1);
+	virtual void removePoint(int i);
+	virtual void removeLastPoint(void); 
+	
+	//virtual void updateProperties(void);
+	//virtual void calculateTortuosity(void);
+	virtual void calculateLength(void);
+	virtual void calculateCLR(void);
+	
+	virtual float getLength(void);
+	virtual float getCLR(void);
+	
+	LineSegment& operator+=(const LineSegment& LineSeg);
+};
+
+
+//-------------------Class 4: Kernel ------------------------------------------------
+
+class Kernel{
+
+private:
+	int nDims;
+	Point dims;
+	Point centre;
+	float *mData;
+	
+public:
+
+	Kernel();
+	Kernel(Point dims);
+	~Kernel();
+	
+	virtual float getValue(int i, int j, int k=0, int t=0);
+	virtual void setValue(float value, int i, int j, int k=0, int t=0);
+	
+	virtual void GenerateUniform(Point dims);
+	virtual void GenerateGaussian(Point dims, Point sd);
+	
+};
+
+//---------------------Class 5: ImageFilter------------------------------------------------
+
+class ImageFilter{
+
+private:
+	ScalarField *image;
+	Kernel *loadedKernel;
+	char *filterType;
+	
+public:
+	void loadImage(ScalarField inputImage);
+	void loadImage(char *inputImageName);
+	
+	void setFilterType(char *filterType);
+	
+	ScalarField output(void);
+	
+	virtual void update(void);
+	
+	virtual void ConvolveWithKernel(Kernel inputKernel);
+	
+};
+
+	

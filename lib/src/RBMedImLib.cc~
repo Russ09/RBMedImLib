@@ -1,0 +1,928 @@
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//			Author: Russell Bates				     //
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+// 			C++ image analysis library 			     //
+//				RBMedImLib.h				     //
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+#include <RBMedImLib.h>
+#include <algorithm>
+#include <assert.h>
+#include <math.h>
+
+# define M_PI           3.14159265358979323846  /* pi */
+
+//------------------Class 1: ScalarField----------------------------------------
+
+
+//constructor
+ScalarField::ScalarField(void){
+	this->NX=0;
+	this->NY=0;
+	this->NZ=0;
+	this->NT=0;
+	
+	this->field = new float[10];
+}
+
+ScalarField::ScalarField(const ScalarField& ScalField){
+	int x,y,z,t;
+	float thisVal;
+	
+	this->NX = ScalField.NX;
+	this->NY = ScalField.NY;
+	this->NZ = ScalField.NZ;
+	this->NT = ScalField.NT;
+	
+	this->field = new float[this->NX*this->NY*this->NZ*this->NT];
+	
+	for(x=0;x<this->NX;x++){
+	for(y=0;y<this->NY;y++){
+	for(z=0;z<this->NZ;z++){
+	for(t=0;t<this->NT;t++){
+		thisVal = ScalField.get(x,y,z,t);
+		this->set(thisVal,x,y,z,t);
+	}}}}
+}
+
+//destructor
+ScalarField::~ScalarField(void){
+	delete this->field;
+}
+
+inline float ScalarField::get(int x,int y, int z,int t)const{
+	return field[t*NX*NY*NZ + z*this->NX*NY + y*NX + x];
+}
+
+inline float ScalarField::get(int i)const{
+	return field[i];
+}
+
+void ScalarField::set(float value,int x,int y, int z,int t){
+	field[t*NX*NY*NZ + z*NX*NY + y*NX + x] = value;
+}
+
+void ScalarField::set(float value,int i){
+	field[i] = value;
+}
+
+float ScalarField::getDim(int dim)const{
+	switch(dim){
+		case 1:
+			return this->NX;
+		case 2:
+			return this->NY;
+		case 3:
+			return this->NZ;
+		case 4:
+			return this->NT;
+	}
+}
+
+void ScalarField::setAll(float value,int t){
+	int i;
+	for(i=0;i<NX*NY*NZ;i++){
+	field[t*NX*NY*NZ+i] = value;
+	};
+}
+
+void ScalarField::multiplyFrameByScalar(float scalar,int t){
+	int i;
+	for(i=0;i<NX*NY*NZ;i++) field[t*NX*NY*NZ+i]*=scalar;
+}
+
+float ScalarField::getMax(void){
+	int x,y,z,t;
+	float maxVal;
+	float thisVal;
+	
+	maxVal = this->get(0,0,0,0);
+	
+	for(x=0;x<this->NX;x++){
+	for(y=0;y<this->NY;y++){
+	for(z=0;z<this->NZ;z++){
+	for(t=0;t<this->NT;t++){
+		thisVal = this->get(x,y,z,t);
+		if(thisVal > maxVal){
+			maxVal = thisVal;
+		}
+	}}}}
+			
+}
+
+float ScalarField::getMin(void){
+	int x,y,z,t;
+	float minVal;
+	float thisVal;
+	
+	minVal = this->get(0,0,0,0);
+	
+	for(x=0;x<this->NX;x++){
+	for(y=0;y<this->NY;y++){
+	for(z=0;z<this->NZ;z++){
+	for(t=0;t<this->NT;t++){
+		thisVal = this->get(x,y,z,t);
+		if(thisVal < minVal){
+			minVal = thisVal;
+		}
+	}}}}
+			
+}
+
+void ScalarField::readNifti(char *imageName){
+
+	nifti_1_header hdr;
+	FILE *fp;
+	int tmp;
+	int x,y,z,t;
+	unsigned char data2;
+	signed short data4;
+	signed int data8;
+	float data16;
+	double data64;
+	signed char data256;
+	unsigned short data512;
+	unsigned int data768;
+
+	//open nifti image
+	fp = fopen(imageName,"r");
+
+	//read header information into nifti header class
+	tmp = fread(&hdr,MIN_HEADER_SIZE,1,fp);
+
+	//to open some multichannel 3D images which have the channels in the 5th dimension instead of the 4th dimension
+	if ((hdr.dim[4]==1)&&(hdr.dim[5]>1)){
+	    hdr.dim[4]=hdr.dim[5];
+	    hdr.dim[5]=1;
+	}
+
+	this->NX=static_cast<int>(hdr.dim[1]);
+	this->NY=static_cast<int>(hdr.dim[2]);
+	this->NZ=static_cast<int>(hdr.dim[3]);
+	this->NT=static_cast<int>(hdr.dim[4]);
+	
+	this->dX=hdr.pixdim[1];
+	this->dY=hdr.pixdim[2];
+	this->dZ=hdr.pixdim[3];
+	this->dT=hdr.pixdim[4];
+	
+	if (this->NT<1) {this->NT=1; hdr.dim[4]=1;}
+  	this->NXNY=this->NX*this->NY;
+  	this->NXNYNZ=this->NXNY*this->NZ;
+	
+	this->field = new float[this->NXNYNZ * this->NT];
+	
+	std::cout << this->NXNYNZ << " " << this->NT << std::endl;
+	
+	// jump to data offset
+  	tmp = fseek(fp, (long)(hdr.vox_offset), SEEK_SET);
+  	
+  	if(hdr.scl_slope == 0){
+  		hdr.scl_slope = 1;
+  	}
+  	
+	  	//load the image
+	  if (hdr.datatype==2){ //2  ->  unsigned char +++++++++++++++++++++++++++++++++++++++++++++++++
+	    for(t=0;t<this->NT;t++) for(z=0;z<this->NZ;z++) for(y=0;y<this->NY;y++) for(x=0;x<this->NX;x++){
+	      tmp = fread(&data2, sizeof(unsigned char), 1, fp);
+	      this->set(static_cast<float>((data2 * hdr.scl_slope) + hdr.scl_inter),x,y,z,t);
+	    }
+	  }
+	  else  if (hdr.datatype==4){ //4  ->  signed short +++++++++++++++++++++++++++++++++++++++++++++++++
+	    for(t=0;t<this->NT;t++) for(z=0;z<this->NZ;z++) for(y=0;y<this->NY;y++) for(x=0;x<this->NX;x++){
+	      tmp = fread(&data4, sizeof(signed short), 1, fp);
+	      this->set(static_cast<float>((data4 * hdr.scl_slope) + hdr.scl_inter),x,y,z,t);
+	    }
+	  }
+	  else  if (hdr.datatype==8){  //8  ->  signed int +++++++++++++++++++++++++++++++++++++++++++++++++
+	    for(t=0;t<this->NT;t++) for(z=0;z<this->NZ;z++) for(y=0;y<this->NY;y++) for(x=0;x<this->NX;x++){
+	      tmp = fread(&data8, sizeof(signed int), 1, fp);
+	      this->set(static_cast<float>((data8 * hdr.scl_slope) + hdr.scl_inter),x,y,z,t);
+	    }
+	  }
+	  else  if (hdr.datatype==16){  //16  ->  float +++++++++++++++++++++++++++++++++++++++++++++++++
+	    for(t=0;t<this->NT;t++) for(z=0;z<this->NZ;z++) for(y=0;y<this->NY;y++) for(x=0;x<this->NX;x++){
+	      tmp = fread(&data16, sizeof(float), 1, fp);
+	      this->set(static_cast<float>((data16 * hdr.scl_slope) + hdr.scl_inter),x,y,z,t);
+	    }
+	  }
+	  else  if (hdr.datatype==64){  //64  ->  double +++++++++++++++++++++++++++++++++++++++++++++++++
+	    for(t=0;t<this->NT;t++) for(z=0;z<this->NZ;z++) for(y=0;y<this->NY;y++) for(x=0;x<this->NX;x++){
+	      tmp = fread(&data64, sizeof(double), 1, fp);
+	      this->set(static_cast<float>((data64 * hdr.scl_slope) + hdr.scl_inter),x,y,z,t);
+	    }
+	  }
+	  else  if (hdr.datatype==256){  //256  ->  signed char +++++++++++++++++++++++++++++++++++++++++++++++++
+	    for(t=0;t<this->NT;t++) for(z=0;z<this->NZ;z++) for(y=0;y<this->NY;y++) for(x=0;x<this->NX;x++){
+	      tmp = fread(&data256, sizeof(signed char), 1, fp);
+	      this->set(static_cast<float>((data256 * hdr.scl_slope) + hdr.scl_inter),x,y,z,t);
+	    }
+	  }
+	  else  if (hdr.datatype==512){  //512  ->  unsigned short +++++++++++++++++++++++++++++++++++++++++++++++++
+	    for(t=0;t<this->NT;t++) for(z=0;z<this->NZ;z++) for(y=0;y<this->NY;y++) for(x=0;x<this->NX;x++){
+	      tmp = fread(&data512, sizeof(unsigned short), 1, fp);
+	      this->set(static_cast<float>((data512 * hdr.scl_slope) + hdr.scl_inter),x,y,z,t);
+	    }
+	  }
+	  else  if (hdr.datatype==768){  //768  ->  unsigned int +++++++++++++++++++++++++++++++++++++++++++++++++
+	    for(t=0;t<this->NT;t++) for(z=0;z<this->NZ;z++) for(y=0;y<this->NY;y++) for(x=0;x<this->NX;x++){
+	      tmp = fread(&data768, sizeof(unsigned int), 1, fp);
+	      this->set(static_cast<float>((data768 * hdr.scl_slope) + hdr.scl_inter),x,y,z,t);
+	    }
+	  }
+	  else{
+	    std::cout << "Image contains an unsupported graylevel type" << std::endl;
+	  }
+	  
+	  fclose(fp);
+	 
+
+}
+
+///write a scalar field in a nifti image
+void ScalarField::writeNifti(char *imageName){
+  int i;
+  int x,y,z,t;
+  nifti_1_header hdr;
+  nifti1_extender pad={0,0,0,0};
+  FILE *fp;
+  int ret;
+  float *data=NULL;
+  
+  
+  //1) create the header
+  memset((void *)&hdr,0, sizeof(hdr));
+  hdr.sizeof_hdr = MIN_HEADER_SIZE;
+  hdr.dim[0] = 4;
+  hdr.dim[1] = this->NX;
+  hdr.dim[2] = this->NY;
+  hdr.dim[3] = this->NZ;
+  hdr.dim[4] = this->NT;
+  hdr.datatype = NIFTI_TYPE_FLOAT32;
+  hdr.bitpix = 32; 
+  hdr.qform_code=0; // should ideally be set to 1 but I don't set the values of 'quatern_b', 'quatern_c' and 'quatern_d'
+  hdr.pixdim[1] = this->dX;
+  hdr.pixdim[2] = this->dY;
+  hdr.pixdim[3] = this->dZ;
+  hdr.pixdim[4] = this->dT;
+  hdr.qoffset_x=this->im2wld[0][3];
+  hdr.qoffset_y=this->im2wld[1][3];
+  hdr.qoffset_z=this->im2wld[2][3];
+  hdr.sform_code=1;
+  hdr.srow_x[0]=this->im2wld[0][0];  hdr.srow_x[1]=this->im2wld[0][1];  hdr.srow_x[2]=this->im2wld[0][2];  hdr.srow_x[3]=this->im2wld[0][3];
+  hdr.srow_y[0]=this->im2wld[1][0];  hdr.srow_y[1]=this->im2wld[1][1];  hdr.srow_y[2]=this->im2wld[1][2];  hdr.srow_y[3]=this->im2wld[1][3];
+  hdr.srow_z[0]=this->im2wld[2][0];  hdr.srow_z[1]=this->im2wld[2][1];  hdr.srow_z[2]=this->im2wld[2][2];  hdr.srow_z[3]=this->im2wld[2][3];
+  hdr.vox_offset = (float) NII_HEADER_SIZE;
+  hdr.scl_inter = 0.0;
+  hdr.scl_slope = 1.0;
+  hdr.xyzt_units = NIFTI_UNITS_MM | NIFTI_UNITS_SEC;
+  strncpy(hdr.magic, "n+1\0", 4);
+
+  //2) save the image OutputImageName
+  //allocate and fill the buffer 
+  data = new float [hdr.dim[1]*hdr.dim[2]*hdr.dim[3]*hdr.dim[4]];
+  
+  i=0;
+  for(t=0;t<this->NT;t++) for(z=0;z<this->NZ;z++) for(y=0;y<this->NY;y++) for(x=0;x<this->NX;x++){
+    data[i] = this->get(x,y,z,t);
+    i++;
+  }
+  
+  // write first 348 bytes of header  
+  fp = fopen(imageName,"wb");
+  ret = fwrite(&hdr, MIN_HEADER_SIZE, 1, fp);
+  
+  // write extender pad and image data  
+  ret = fwrite(&pad, 4, 1, fp);
+  ret = fwrite(data, (size_t)(hdr.bitpix/8), hdr.dim[1]*hdr.dim[2]*hdr.dim[3]*hdr.dim[4], fp);
+  
+  fclose(fp);
+  
+}
+
+void swap(ScalarField& first, ScalarField& second){
+        
+        using std::swap; 
+
+        swap(first.NX, second.NX);
+        swap(first.NY, second.NY);
+        swap(first.NZ, second.NZ);
+        swap(first.NT, second.NT);
+        
+        swap(first.dX,second.dX);
+        swap(first.dY,second.dY);
+        swap(first.dZ,second.dZ);
+        swap(first.dT,second.dT);
+        
+        std::swap(first.field, second.field);
+        
+        
+}
+
+ScalarField& ScalarField::operator=(ScalarField other){
+	
+	swap(*this,other);	
+	return *this;
+}
+
+ScalarField& ScalarField::operator+=(const float& scalar){
+	int i;
+	for(i=0;i<NX*NY*NZ*NT;i++) field[i] += scalar;
+	return *this;
+}
+
+ScalarField& ScalarField::operator+=(const ScalarField& ScalField){
+	int i;
+	if(NX==ScalField.getDim(1)&&NY==ScalField.getDim(2)&&NZ==ScalField.getDim(3)&&NT==ScalField.getDim(4)){
+		for(i=0;i<NX*NY*NZ*NT;i++) field[i] += ScalField.get(i);
+		return *this;
+	}
+	else{
+		std::cout<<"Dimensional mismatch when attempting ScalarField addition";
+	}
+}
+
+ScalarField& ScalarField::operator-=(const float& scalar){
+	int i;
+	for(i=0;i<NX*NY*NZ*NT;i++) field[i] -= scalar;
+	return *this;
+}
+
+ScalarField& ScalarField::operator-=(const ScalarField& ScalField){
+	int i;
+	if(NX==ScalField.getDim(1)&&NY==ScalField.getDim(2)&&NZ==ScalField.getDim(3)&&NT==ScalField.getDim(4)){
+		for(i=0;i<NX*NY*NZ*NT;i++) field[i] -= ScalField.get(i);
+		return *this;
+	}
+	else{
+		std::cout<<"Dimensional mismatch when attempting ScalarField subtraction";
+	}
+}
+
+ScalarField& ScalarField::operator*=(const float& scalar){
+	int i;
+	for(i=0;i<NX*NY*NZ*NT;i++) field[i] *= scalar;
+	return *this;
+}
+
+ScalarField& ScalarField::operator*=(const ScalarField& ScalField){
+	int i;
+	if(NX==ScalField.getDim(1)&&NY==ScalField.getDim(2)&&NZ==ScalField.getDim(3)&&NT==ScalField.getDim(4)){
+		for(i=0;i<NX*NY*NZ*NT;i++) field[i] *= ScalField.get(i);
+		return *this;
+	}
+	else{
+		std::cout<<"Dimensional mismatch when attempting ScalarField multiplication";
+	}
+}
+
+ScalarField& ScalarField::operator/=(const float& scalar){
+	int i;
+	for(i=0;i<NX*NY*NZ*NT;i++) field[i] /= scalar;
+	return *this;
+}
+
+ScalarField& ScalarField::operator/=(const ScalarField& ScalField){
+	int i;
+	if(NX==ScalField.getDim(1)&&NY==ScalField.getDim(2)&&NZ==ScalField.getDim(3)&&NT==ScalField.getDim(4)){
+		for(i=0;i<NX*NY*NZ*NT;i++) field[i] /= ScalField.get(i);
+		return *this;
+	}
+	else{
+		std::cout<<"Dimensional mismatch when attempting ScalarField division";
+	}
+}
+
+ScalarField operator+(ScalarField ScalField,const float scalar){
+	ScalField += scalar;
+	return ScalField;
+}
+
+ScalarField operator+(ScalarField ScalField1,const ScalarField& ScalField2){
+	ScalField1 += ScalField2;
+	return ScalField1;
+}
+
+ScalarField operator-(ScalarField ScalField,const float scalar){
+	ScalField -= scalar;
+	return ScalField;
+}
+
+ScalarField operator-(ScalarField ScalField1,const ScalarField& ScalField2){
+	ScalField1 -= ScalField2;
+	return ScalField1;
+}
+
+ScalarField operator*(ScalarField ScalField,const float scalar){
+	ScalField *= scalar;
+	return ScalField;
+}
+
+ScalarField operator*(ScalarField ScalField1,const ScalarField& ScalField2){
+	ScalField1 *= ScalField2;
+	return ScalField1;
+}
+
+ScalarField operator/(ScalarField ScalField,const float scalar){
+	ScalField /= scalar;
+	return ScalField;
+}
+
+ScalarField operator/(ScalarField ScalField1,const ScalarField& ScalField2){
+	ScalField1 /= ScalField2;
+	return ScalField1;
+}
+
+
+
+//------------------Class 2: Point---------------------------------------------
+
+Point::Point(void){
+	nDims = 3;
+	coords = new float[3];
+	coords[0] = 0;
+	coords[1] = 0;
+	coords[2] = 0;
+}
+
+Point::Point(int inputDims){
+
+	int i;
+	nDims = inputDims;
+	coords = new float[nDims];
+	
+	for(i=0;i<nDims;i++){
+		coords[i] = 0;
+	}
+}
+
+Point::Point(const Point& P1){
+	int i;
+	nDims = P1.getDims();
+	coords = new float[nDims];
+	for(i=0;i<nDims;i++){
+		coords[i] = P1.get(i);
+	}
+}
+
+Point::Point(float x, float y, float z){
+	nDims = 3;
+	coords = new float[3];
+	coords[0] = x;
+	coords[1] = y;
+	coords[2] = z;
+}
+
+Point::~Point(){
+	delete coords;
+}
+
+float Point::get(const int i)const{
+	if(i>=0 && i<nDims){
+		return coords[i];
+	}
+	else{
+		std::cout<<"Assigned dimension was outside the number of possible dimensions\n"; 
+	}
+}
+
+void Point::set(const int i,const float value){
+	if(i>=0 && i<nDims){
+		coords[i] = value;
+	}
+	else{
+		std::cout<<"Assigned dimension was outside the number of possible dimensions\n"; 
+	}
+}
+
+void swap(Point& P1, Point& P2){
+
+        using std::swap; 
+        swap(P1.nDims, P2.nDims);
+        swap(P1.coords,P2.coords);
+}
+
+float dot(Point& P1, Point& P2){
+	int i;
+	float dotVal;
+	dotVal = 0;
+	
+	if(P1.nDims == P2.nDims){
+		for(i=0;i<P1.nDims;i++){
+			dotVal +=P1(i)*P2(i);
+		}
+	}
+	return dotVal;
+}
+
+float abs(Point P1){
+	int i;
+	float absVal;
+	
+	absVal = 0;
+	
+	for(i=0;i<P1.getDims();i++){
+		absVal += P1.get(i)*P1.get(i);
+	}
+	
+	return sqrt(absVal);
+}
+
+float prod(Point P1){
+	int i;
+	float prodVal;
+	
+	prodVal = 0;
+	
+	for(i=0;i<P1.getDims();i++){
+		prodVal *= P1.get(i);
+	}
+	
+	return prodVal;
+}
+
+float& Point::operator()(const int& i){
+	if(i <= nDims && i>0){
+		return this->coords[i-1];
+	}
+	else{
+		std::cout<<"Coordinate specified is higher than the number of dimensions\n";
+	}
+}
+	
+Point& Point::operator+=(const Point& P2){
+	int i;
+	if(this->nDims == P2.getDims()){
+		for(i=0;i<this->nDims;i++){
+			coords[i] += P2.get(i);
+		}
+	}
+}
+
+Point& Point::operator+=(const float& value){
+	int i;
+	for(i=0;i<this->nDims;i++){
+		coords[i] += value;
+	}
+}
+
+Point& Point::operator-=(const Point& P2){
+	int i;
+	if(this->nDims == P2.getDims()){
+		Point POut;
+		for(i=0;i<this->nDims;i++){
+			coords[i] -= P2.get(i);
+		}
+	}
+}
+
+Point& Point::operator-=(const float& value){
+	int i;
+	for(i=0;i<this->nDims;i++){
+		coords[i] -= value;
+	}
+}
+
+Point& Point::operator/=(const Point& P2){
+	int i;
+	if(this->nDims == P2.getDims()){
+		Point POut;
+		for(i=0;i<this->nDims;i++){
+			coords[i] /= P2.get(i);
+		}
+	}
+}
+
+Point& Point::operator/=(const float& value){
+	int i;
+	for(i=0;i<this->nDims;i++){
+		coords[i] /= value;
+	}
+}
+
+Point& Point::operator*=(const Point& P2){
+	int i;
+	if(this->nDims == P2.getDims()){
+		Point POut;
+		for(i=0;i<this->nDims;i++){
+			coords[i] *= P2.get(i);
+		}
+	}
+}
+
+Point& Point::operator*=(const float& value){
+	int i;
+	for(i=0;i<this->nDims;i++){
+		coords[i] *= value;
+	}
+}
+
+Point& Point::operator=(Point other){
+	swap(*this,other);
+	return *this;
+}
+
+Point operator+(Point P1, const Point& P2){
+	P1 += P2;
+	return P1;
+}
+
+Point operator+(Point P1, const float& value){
+	P1 += value;
+	return P1;
+}
+
+Point operator-(Point P1, const Point& P2){
+	P1 -= P2;
+	return P1;
+}
+
+Point operator-(Point P1, const float& value){
+	P1 -= value;
+	return P1;
+}
+
+Point operator/(Point P1, const Point& P2){
+	P1 /= P2;
+	return P1;
+}
+
+Point operator/(Point P1, const float& value){
+	P1 /= value;
+	return P1;
+}
+
+Point operator*(Point P1, const Point& P2){
+	P1 *= P2;
+	return P1;
+}
+
+Point operator*(Point P1, const float& value){
+	P1 *= value;
+	return P1;
+}
+
+//-----------------Class 3: Line Segment---------------------------------------
+
+
+LineSegment::LineSegment(){
+	nPoints = 0;
+}
+
+LineSegment::LineSegment(const Point& P1){
+	nPoints = 1;
+	nDims = P1.getDims();
+	Points = new Point[1];
+	Points[0] = P1;
+}
+
+Point LineSegment::getPoint(int i){
+	assert(i>0 && i<=nPoints);
+	return Points[i-1];
+}
+
+Point LineSegment::getLastPoint(void){
+	return Points[nPoints-1];
+}
+
+void LineSegment::addPoint(Point P1){
+
+	int i;
+	assert(P1.getDims() == nDims);
+	nPoints += 1;
+	Point *newPoints;
+	newPoints = new Point[nPoints];
+	for(i=0;i<(nPoints-1);i++){
+		newPoints[i] = Points[i];
+	}
+	newPoints[nPoints-1] = P1;
+	Points = newPoints;
+	
+}
+
+void LineSegment::removePoint(int i){
+	
+	int j;
+	assert(i<= nPoints);
+	nPoints -= 1;
+	Point *newPoints;
+	
+	newPoints = new Point[nPoints];
+	
+	
+	if(i==nPoints+1){
+		for(j=0;j<(nPoints);j++){
+			newPoints[j] = Points[j];	
+		}
+	}
+	else if(i == 1){
+		for(j=1;j<(nPoints+1);j++){
+			newPoints[j-1] = Points[j];	
+		}
+	}
+	
+	else if(i>1 && i<nPoints){
+		for(j=0;j<(i-1);j++){
+			newPoints[j] = Points[j];	
+		}
+		for(j=(i);j<(nPoints+1);j++){
+			newPoints[j-1] = Points[j];	
+		}
+	}
+	
+	Points = newPoints;	
+}
+
+void LineSegment::removeLastPoint(void){
+
+	this->removePoint(nPoints);
+
+}
+
+void LineSegment::calculateLength(void){
+	
+	int i;
+	float lengthVal;
+	lengthVal = 0;
+	
+	for(i=0;i<(nPoints-1);i++){
+		lengthVal += abs(Points[i+1] - Points[i]);
+	}
+	
+	length = lengthVal;
+}
+
+void LineSegment::calculateCLR(void){
+
+	float chordLength;
+	this->calculateLength();
+	
+	chordLength = abs(getPoint(1) - getLastPoint());
+	CLR = length/chordLength;
+}
+
+float LineSegment::getLength(void){
+	return length;
+}
+
+float LineSegment::getCLR(void){
+	return CLR;
+}
+
+
+//------------------Class 4: Kernel ----------------------------------------------
+
+Kernel::Kernel(void){
+
+	nDims = 2;
+	Point dims(nDims);
+
+}
+
+Kernel::Kernel(Point inputDims){
+
+	nDims = inputDims.getDims();
+	dims = inputDims;
+	mData = new float[(int)prod(inputDims)];
+
+}
+
+Kernel::~Kernel(){
+	delete mData;
+}
+
+float Kernel::getValue(int i, int j, int k, int t){
+
+	if(nDims == 2){
+		return mData[(int)(j*dims(1) + i)];
+	}
+	if(nDims == 3){
+		return mData[(int)(k*dims(1)*dims(2) + j*dims(1) + i)];
+	}
+	if(nDims == 4){
+		return mData[(int)(t*dims(1)*dims(2)*dims(3) + k*dims(1)*dims(2) + j*dims(1) + i)];
+	}
+
+}
+
+void Kernel::setValue(float value, int i, int j, int k, int t){
+
+	if(nDims == 2){
+		mData[(int)(j*dims(1) + i)] = value;
+	}	
+	if(nDims == 3){
+		mData[(int)(k*dims(1)*dims(2) + j*dims(1) + i)] = value;
+	}
+	if(nDims == 4){
+		mData[(int)(t*dims(1)*dims(2)*dims(3) + k*dims(1)*dims(2) + j*dims(1) + i)] = value;
+	}
+
+}
+
+void Kernel::GenerateUniform(Point inputDims){
+
+	int i;
+	assert((int)(inputDims(1))%2 == 1);
+	assert((int)(inputDims(2))%2 == 1);
+	assert((int)(inputDims(3))%2 == 1);
+	
+	nDims = inputDims.getDims();
+	dims = inputDims;
+	mData = new float[(int)(prod(inputDims))];
+	
+	Point centre(inputDims.getDims());
+	centre = (inputDims + 1)/2;
+	
+	for(i=0;i<prod(inputDims);i++){
+		mData[i] = 1/prod(inputDims);
+	}
+	
+}
+
+void Kernel::GenerateGaussian(Point inputDims, float sd){
+	
+	int i,j,k,l,x,y,z,t;
+	float gaussVal;
+	double num, denom;
+	assert((int)(inputDims(1))%2 == 1);
+	assert((int)(inputDims(2))%2 == 1);
+	assert((int)(inputDims(3))%2 == 1);
+	
+	nDims = inputDims.getDims();
+	dims = inputDims;
+	mData = new float[(int)(prod(inputDims))];
+	
+	gaussVal = 0;
+	
+	if(inputDims.getDims() == 2){
+		for(i=0;i<inputDims(1);i++){
+		for(j=0;j<inputDims(2);j++){
+			x = i-centre(1)+1;
+			y = j-centre(2)+1;
+			num = (double)(-(x*x + y*y));
+			denom = (double)(2*sd*sd);
+			gaussVal = exp(num/denom);
+			gaussVal = gaussVal/(sd*sqrt(2*M_PI));
+			this->setValue(gaussVal,i,j);
+		}}
+	}
+	if(inputDims.getDims() == 3){
+	
+		
+		assert((int)(inputDims(3))%2 == 1);
+	
+		for(i=0;i<inputDims(1);i++){
+		for(j=0;j<inputDims(2);j++){
+		for(k=0;k<inputDims(3);k++){
+			x = i-centre(1)+1;
+			y = j-centre(2)+1;
+			z = k-centre(3)+1;
+			num = (double)(-(x*x + y*y + z*z));
+			denom = (double)(2*sd*sd);
+			gaussVal = exp(num/denom);
+			gaussVal = gaussVal/(sd*sqrt(2*M_PI));
+			this->setValue(gaussVal,i,j,k);
+		}}}
+	}
+	if(inputDims.getDims() == 4){
+		assert((int)(inputDims(3))%2 == 1);
+		assert((int)(inputDims(4))%2 == 1);
+		for(i=0;i<inputDims(1);i++){
+		for(j=0;j<inputDims(2);j++){
+		for(k=0;k<inputDims(3);k++){
+		for(l=0;l<inputDims(4);l++){
+			x = i-centre(1)+1;
+			y = j-centre(2)+1;
+			z = k-centre(3)+1;
+			t = l-centre(4)+1;
+			num = (double)(-(x*x + y*y + z*z + t*t));
+			denom = (double)(2*sd*sd);
+			gaussVal = exp(num/denom);
+			gaussVal = gaussVal/(sd*sqrt(2*M_PI));
+			this->setValue(gaussVal,i,j,k,l);
+		}}}}
+	}
+	
+	//normalise such that sum of the kernel is equal to 1
+	float sum;
+	sum = 0;
+	for(i=0;i<prod(inputDims);i++){
+		sum += mData[i]; 
+	}
+	for(i=0;i<prod(inputDims);i++){
+		mData[i] /= sum; 
+	}
+}
+
+
+
+//--------------Class 5: ImageFilter---------------------------------------------------
+
+
+void ImageFilter::loadImage(ScalarField inputImage){
+	this->image = &inputImage;
+}
+
+
+
+
